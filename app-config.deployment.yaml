@@ -1,0 +1,5 @@
+app:
+  baseUrl: ${BACKSTAGE_HOST}
+
+backend:
+  baseUrl: ${BACKSTAGE_HOST}
