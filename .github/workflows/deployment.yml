@@ -1,0 +1,64 @@
+name: Deploy Backstage Application
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up NVM
+        run: |
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+          nvm install 18
+          nvm use 18
+
+      - name: Install Yarn
+        run: |
+          npm install -g yarn
+          yarn set version stable
+          npm install -g pm2
+
+    #   - name: Install dependencies
+    #     run: yarn install
+
+    #   - name: Build the application
+    #     run: yarn build:all
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.UBUNTU_SSH_PRIVATE_KEY }}" > ~/.ssh/UBUNTU_key.pem
+          chmod 600 ~/.ssh/UBUNTU_key.pem
+          ssh-keyscan -H 40.90.225.198 >> ~/.ssh/known_hosts
+
+      - name: Transfer Bundle to UBUNTU
+        run: |
+          scp -i ~/.ssh/UBUNTU_key.pem -o StrictHostKeyChecking=no -r . vmadmin@40.90.225.198:/home/ubuntu/backstage-project/
+
+      - name: Deploy Application on UBUNTU
+        run: |
+          ssh -i ~/.ssh/UBUNTU_key.pem -o StrictHostKeyChecking=no vmadmin@40.90.225.198 '
+            source ~/.bashrc && 
+            export NVM_DIR="$HOME/.nvm" &&
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" &&
+            nvm use 18 && npm install -g yarn && yarn set version stable
+            if ! command -v pm2 &> /dev/null; then
+              echo "PM2 not found, installing..."
+              npm install -g pm2 || { echo "Failed to install PM2"; exit 1; }
+              echo "PM2 installed."
+            else
+              echo "PM2 is already installed."
+              pm2 --version
+            fi
+            cd /home/ubuntu/backstage-project &&
+            yarn install && yarn start '
