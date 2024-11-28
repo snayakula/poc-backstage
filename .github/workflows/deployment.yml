@@ -43,7 +43,8 @@ jobs:
 
       - name: Transfer Bundle to UBUNTU
         run: |
-          scp -i ~/.ssh/UBUNTU_key.pem -o StrictHostKeyChecking=no -r ./* vmadmin@40.90.225.198:/home/ubuntu/backstage-project/
+          ls -lh
+          scp -i ~/.ssh/UBUNTU_key.pem -o StrictHostKeyChecking=no -r ./* vmadmin@40.90.225.198:/home/vmadmin/directpoc
 
       - name: Deploy Application on UBUNTU
         run: |
@@ -60,5 +61,5 @@ jobs:
               echo "PM2 is already installed."
               pm2 --version
             fi
-            cd /home/ubuntu/backstage-project &&
+            cd /home/vmadmin/directpoc &&
             yarn install && yarn start '
