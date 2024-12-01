@@ -28,11 +28,13 @@ jobs:
           yarn set version stable
           npm install -g pm2
 
-    #   - name: Install dependencies
-    #     run: yarn install
-
-    #   - name: Build the application
-    #     run: yarn build:all
+      - name: Cache Node modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/yarn
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
 
       - name: Set up SSH
         run: |
@@ -43,7 +45,7 @@ jobs:
 
       - name: Transfer Bundle to UBUNTU
         run: |
-          scp -i ~/.ssh/UBUNTU_key.pem -o StrictHostKeyChecking=no -r * vmadmin@40.90.225.198:/home/vmadmin/directpoc/
+          scp -i ~/.ssh/UBUNTU_key.pem -o StrictHostKeyChecking=no -r * vmadmin@40.90.225.198:/home/vmadmin/directpoc/ || { echo "File transfer failed"; exit 1; }
 
       - name: Deploy Application on UBUNTU
         run: |
@@ -51,7 +53,7 @@ jobs:
             source ~/.bashrc && 
             export NVM_DIR="$HOME/.nvm" &&
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" &&
-            nvm use 18 && npm install -g yarn && yarn set version stable
+            nvm use 18
             if ! command -v pm2 &> /dev/null; then
               echo "PM2 not found, installing..."
               npm install -g pm2 || { echo "Failed to install PM2"; exit 1; }
@@ -61,4 +63,9 @@ jobs:
               pm2 --version
             fi
             cd /home/vmadmin/directpoc &&
-            yarn install && yarn start '
+            yarn install || { echo "Yarn install failed"; exit 1; }
+            
+            # Start the application with PM2 and redirect output to a log file for troubleshooting
+            pm2 start yarn --name "backstageapp" --start > app.log 2>&1 
+            echo "Application started with PM2"
+          '
