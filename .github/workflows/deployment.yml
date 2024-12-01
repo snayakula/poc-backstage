@@ -44,7 +44,7 @@ jobs:
       - name: Transfer Bundle to UBUNTU
         run: |
           ls -lh
-          scp -i ~/.ssh/UBUNTU_key.pem -o StrictHostKeyChecking=no -r ./* vmadmin@40.90.225.198:/home/vmadmin/directpoc
+          scp -i ~/.ssh/UBUNTU_key.pem -o StrictHostKeyChecking=no -r . vmadmin@40.90.225.198:/home/vmadmin/directpoc
 
       - name: Deploy Application on UBUNTU
         run: |
