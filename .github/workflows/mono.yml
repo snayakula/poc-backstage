@@ -1,0 +1,98 @@
+name: MONO Deployment Backstage Application
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js with NVM
+        run: |
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+          nvm install 18  # Install Node.js version 18
+          nvm use 18      # Use Node.js version 18
+
+      - name: Verify Node.js version
+        run: |
+          node -v || { echo "Node.js not found"; exit 1; }
+          if [[ "$(node -v)" < "v18" ]]; then
+            echo "Node.js version is less than 18"; exit 1;
+          fi
+
+      - name: Install Yarn
+        run: |
+          npm install -g yarn
+          yarn set version stable
+          if [[ "$(yarn --version)" < "4" ]]; then
+            echo "Yarn version is less than 4"; exit 1;
+          fi
+
+      - name: Install PM2
+        run: |
+          npm install -g pm2
+          pm2_version=$(pm2 -v)
+          if [[ -z "$pm2_version" ]]; then
+            echo "PM2 installation failed"; exit 1;
+          fi
+
+      - name: Cache Node modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/yarn
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.UBUNTU_SSH_PRIVATE_KEY }}" > ~/.ssh/UBUNTU_key.pem
+          chmod 600 ~/.ssh/UBUNTU_key.pem
+          ssh-keyscan -H 40.90.225.198 >> ~/.ssh/known_hosts
+
+      - name: Transfer Bundle to UBUNTU
+        run: |
+          scp -i ~/.ssh/UBUNTU_key.pem -o StrictHostKeyChecking=no -r * vmadmin@40.90.225.198:/home/vmadmin/directpoc/ || { echo "File transfer failed"; exit 1; }
+
+      - name: Deploy Application on UBUNTU
+        run: |
+          ssh -i ~/.ssh/UBUNTU_key.pem -o StrictHostKeyChecking=no vmadmin@40.90.225.198 '
+            source ~/.bashrc && 
+            export NVM_DIR="$HOME/.nvm" &&
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" &&
+            nvm use 18
+            
+            # Verify Node.js version on remote server
+            if [[ "$(node -v)" < "v18" ]]; then
+              echo "Node.js version is less than 18"; exit 1;
+            fi
+            
+            # Verify Yarn version on remote server
+            if [[ "$(yarn --version)" < "4" ]]; then
+              echo "Yarn version is less than 4"; exit 1;
+            fi
+            
+            # Verify PM2 installation on remote server
+            pm2_version=$(pm2 -v)
+            if [[ -z "$pm2_version" ]]; then
+              echo "PM2 installation is failed"; exit 1;
+            fi
+            
+            cd /home/vmadmin/directpoc &&
+            yarn install || { echo "Yarn install failed"; exit 1; }
+
+            # Start the application with PM2 and redirect output to a log file for troubleshooting
+            pm2 start yarn --name "backstage-app" -- start > app.log 2>&1
+            
+            echo "Application started with PM2."
+          '
